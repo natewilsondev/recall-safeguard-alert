@@ -36,7 +36,12 @@ export const useRecalls = (options: UseRecallsOptions = {}) => {
       }
 
       if (options.riskLevel && options.riskLevel !== "all") {
-        query = query.eq("risk_level", options.riskLevel.toUpperCase());
+        // Properly type the risk level value
+        const validRiskLevels = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
+        const riskLevelUpper = options.riskLevel.toUpperCase();
+        if (validRiskLevels.includes(riskLevelUpper as any)) {
+          query = query.eq("risk_level", riskLevelUpper);
+        }
       }
 
       const { data, error } = await query;

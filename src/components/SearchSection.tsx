@@ -1,5 +1,5 @@
 
-import { Search, Filter, AlertTriangle } from "lucide-react";
+import { Search as SearchIcon, Filter, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
@@ -44,7 +44,7 @@ export const SearchSection = () => {
           <form onSubmit={handleSearch} className="relative">
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <Input
                   type="text"
                   placeholder="Enter product name, brand, barcode, or category..."
@@ -58,7 +58,7 @@ export const SearchSection = () => {
                 size="lg" 
                 className="h-14 px-8 bg-recall-trust hover:bg-blue-600 text-white font-semibold"
               >
-                <Search className="w-5 h-5 mr-2" />
+                <SearchIcon className="w-5 h-5 mr-2" />
                 Search Recalls
               </Button>
             </div>

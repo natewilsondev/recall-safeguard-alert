@@ -4,34 +4,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
+import { useNewsletterSignup } from "@/hooks/useNewsletterSignup";
 
 export const NewsletterSignup = () => {
   const [email, setEmail] = useState("");
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const newsletterMutation = useNewsletterSignup();
 
   const categories = [
-    { id: "food", label: "Food & Beverages" },
-    { id: "toys", label: "Toys & Children's Products" },
-    { id: "vehicles", label: "Vehicles & Auto Parts" },
-    { id: "appliances", label: "Home Appliances" },
-    { id: "medical", label: "Medical Devices" },
-    { id: "cosmetics", label: "Cosmetics & Personal Care" }
+    { id: "Food & Beverages", label: "Food & Beverages" },
+    { id: "Toys & Children's Products", label: "Toys & Children's Products" },
+    { id: "Vehicles", label: "Vehicles & Auto Parts" },
+    { id: "Home Appliances", label: "Home Appliances" },
+    { id: "Medical Devices", label: "Medical Devices" },
+    { id: "Cosmetics & Personal Care", label: "Cosmetics & Personal Care" }
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      setIsSubscribed(true);
-      console.log("Subscribed:", { email, categories: selectedCategories });
-    }, 1500);
+    newsletterMutation.mutate({
+      email,
+      categories: selectedCategories
+    });
   };
 
   const toggleCategory = (categoryId: string) => {
@@ -42,7 +38,7 @@ export const NewsletterSignup = () => {
     );
   };
 
-  if (isSubscribed) {
+  if (newsletterMutation.isSuccess) {
     return (
       <section id="alerts" className="py-16 bg-recall-safe-light">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -56,7 +52,11 @@ export const NewsletterSignup = () => {
             </p>
             <Button 
               variant="outline" 
-              onClick={() => setIsSubscribed(false)}
+              onClick={() => {
+                newsletterMutation.reset();
+                setEmail("");
+                setSelectedCategories([]);
+              }}
               className="hover:bg-recall-safe hover:text-white transition-colors"
             >
               Subscribe Another Email
@@ -96,6 +96,7 @@ export const NewsletterSignup = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10 h-12"
                   required
+                  disabled={newsletterMutation.isPending}
                 />
               </div>
             </div>
@@ -111,6 +112,7 @@ export const NewsletterSignup = () => {
                       id={category.id}
                       checked={selectedCategories.includes(category.id)}
                       onCheckedChange={() => toggleCategory(category.id)}
+                      disabled={newsletterMutation.isPending}
                     />
                     <label
                       htmlFor={category.id}
@@ -126,9 +128,9 @@ export const NewsletterSignup = () => {
             <Button 
               type="submit" 
               className="w-full h-12 bg-recall-trust hover:bg-blue-600"
-              disabled={isLoading}
+              disabled={newsletterMutation.isPending}
             >
-              {isLoading ? (
+              {newsletterMutation.isPending ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   Subscribing...

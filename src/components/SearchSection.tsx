@@ -3,20 +3,24 @@ import { Search, Filter, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
+import { useLatestRecall } from "@/hooks/useRecalls";
 
 export const SearchSection = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const { data: latestRecall } = useLatestRecall();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSearching(true);
-    
-    // Simulate search delay
-    setTimeout(() => {
-      setIsSearching(false);
-      console.log("Searching for:", searchQuery);
-    }, 1500);
+    if (searchQuery.trim()) {
+      // Navigate to results page with search query
+      const params = new URLSearchParams({ q: searchQuery.trim() });
+      window.location.href = `/search?${params.toString()}`;
+    }
+  };
+
+  const handleQuickFilter = (category: string) => {
+    const params = new URLSearchParams({ category });
+    window.location.href = `/search?${params.toString()}`;
   };
 
   return (
@@ -52,39 +56,49 @@ export const SearchSection = () => {
               <Button 
                 type="submit" 
                 size="lg" 
-                disabled={isSearching}
                 className="h-14 px-8 bg-recall-trust hover:bg-blue-600 text-white font-semibold"
               >
-                {isSearching ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Searching...
-                  </div>
-                ) : (
-                  <>
-                    <Search className="w-5 h-5 mr-2" />
-                    Search Recalls
-                  </>
-                )}
+                <Search className="w-5 h-5 mr-2" />
+                Search Recalls
               </Button>
             </div>
           </form>
 
           {/* Quick Filters */}
           <div className="flex flex-wrap justify-center gap-2 mt-6">
-            <Button variant="outline" size="sm" className="hover:bg-recall-trust hover:text-white transition-colors">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hover:bg-recall-trust hover:text-white transition-colors"
+              onClick={() => handleQuickFilter("Food & Beverages")}
+            >
               <Filter className="w-4 h-4 mr-1" />
               Food & Beverages
             </Button>
-            <Button variant="outline" size="sm" className="hover:bg-recall-trust hover:text-white transition-colors">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hover:bg-recall-trust hover:text-white transition-colors"
+              onClick={() => handleQuickFilter("Toys & Children's Products")}
+            >
               <Filter className="w-4 h-4 mr-1" />
               Consumer Products
             </Button>
-            <Button variant="outline" size="sm" className="hover:bg-recall-trust hover:text-white transition-colors">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hover:bg-recall-trust hover:text-white transition-colors"
+              onClick={() => handleQuickFilter("Vehicles")}
+            >
               <Filter className="w-4 h-4 mr-1" />
               Vehicles
             </Button>
-            <Button variant="outline" size="sm" className="hover:bg-recall-trust hover:text-white transition-colors">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="hover:bg-recall-trust hover:text-white transition-colors"
+              onClick={() => handleQuickFilter("Medical Devices")}
+            >
               <Filter className="w-4 h-4 mr-1" />
               Medical Devices
             </Button>
@@ -92,13 +106,15 @@ export const SearchSection = () => {
         </div>
 
         {/* Recent Alerts Banner */}
-        <div className="mt-12 bg-recall-warning-light border border-recall-warning rounded-lg p-4 max-w-2xl mx-auto">
-          <div className="flex items-center justify-center text-recall-warning">
-            <AlertTriangle className="w-5 h-5 mr-2" />
-            <span className="font-semibold">Latest Alert:</span>
-            <span className="ml-2">Children's toy recall due to choking hazard</span>
+        {latestRecall && (
+          <div className="mt-12 bg-recall-warning-light border border-recall-warning rounded-lg p-4 max-w-2xl mx-auto">
+            <div className="flex items-center justify-center text-recall-warning">
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              <span className="font-semibold">Latest Alert:</span>
+              <span className="ml-2">{latestRecall.title}</span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );

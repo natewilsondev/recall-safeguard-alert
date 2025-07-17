@@ -14,7 +14,126 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alert_preferences: {
+        Row: {
+          brands: string[] | null
+          categories: string[] | null
+          created_at: string | null
+          email: string
+          id: string
+          is_active: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          brands?: string[] | null
+          categories?: string[] | null
+          created_at?: string | null
+          email: string
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          brands?: string[] | null
+          categories?: string[] | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      recalls: {
+        Row: {
+          affected_lots: string[] | null
+          barcode: string | null
+          brand: string | null
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          product_image_url: string | null
+          product_name: string
+          recall_date: string
+          recall_number: string | null
+          remedy_instructions: string | null
+          risk_level: Database["public"]["Enums"]["risk_level"]
+          source: Database["public"]["Enums"]["recall_source"]
+          source_url: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          affected_lots?: string[] | null
+          barcode?: string | null
+          brand?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          product_image_url?: string | null
+          product_name: string
+          recall_date: string
+          recall_number?: string | null
+          remedy_instructions?: string | null
+          risk_level?: Database["public"]["Enums"]["risk_level"]
+          source: Database["public"]["Enums"]["recall_source"]
+          source_url?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          affected_lots?: string[] | null
+          barcode?: string | null
+          brand?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          product_image_url?: string | null
+          product_name?: string
+          recall_date?: string
+          recall_number?: string | null
+          remedy_instructions?: string | null
+          risk_level?: Database["public"]["Enums"]["risk_level"]
+          source?: Database["public"]["Enums"]["recall_source"]
+          source_url?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_saved_products: {
+        Row: {
+          barcode: string | null
+          brand: string | null
+          category: string | null
+          created_at: string | null
+          id: string
+          product_name: string
+          user_id: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          brand?: string | null
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          product_name: string
+          user_id?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          brand?: string | null
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          product_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +142,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      recall_source: "FDA" | "CPSC" | "NHTSA" | "OTHER"
+      risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +270,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      recall_source: ["FDA", "CPSC", "NHTSA", "OTHER"],
+      risk_level: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+    },
   },
 } as const

@@ -27,91 +27,148 @@ interface RecallData {
   source_url?: string;
 }
 
-const scrapeWithFirecrawl = async (url: string, retries = 3) => {
-  console.log(`[FIRECRAWL] Starting scrape for URL: ${url} (retries left: ${retries})`);
-  
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`[FIRECRAWL] Attempt ${attempt}/${retries} for ${url}`);
-      
-      const requestBody = {
-        url: url,
-        pageOptions: {
-          onlyMainContent: true,
-          waitFor: 2000,
-        },
-        extractorOptions: {
-          mode: 'llm-extraction',
-          extractionPrompt: `Extract recall information from this page and return a JSON array of recalls with the following structure:
-          {
-            "title": "recall title",
-            "description": "description of the issue", 
-            "product_name": "name of the product",
-            "brand": "brand name if available",
-            "category": "product category",
-            "recall_number": "official recall number if available",
-            "recall_date": "date in YYYY-MM-DD format",
-            "risk_level": "LOW|MEDIUM|HIGH|CRITICAL based on severity",
-            "remedy_instructions": "what consumers should do",
-            "source_url": "original URL"
-          }
-          Only extract actual recalls, not other content. Return empty array if no recalls found.`
-        }
-      };
-      
-      console.log(`[FIRECRAWL] Request body:`, JSON.stringify(requestBody, null, 2));
-      
-      const response = await fetch('https://api.firecrawl.dev/v0/scrape', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${firecrawlApiKey}`,
-          'Content-Type': 'application/json',
-          'User-Agent': `RecallScraper/1.0 (Mozilla/5.0 compatible)`,
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      console.log(`[FIRECRAWL] Response status: ${response.status} ${response.statusText}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[FIRECRAWL] API Error Response: ${errorText}`);
-        
-        if (attempt === retries) {
-          throw new Error(`Firecrawl API error after ${retries} attempts: ${response.status} - ${errorText}`);
-        }
-        
-        // Wait before retry (exponential backoff)
-        const waitTime = Math.pow(2, attempt) * 1000;
-        console.log(`[FIRECRAWL] Waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-
-      const data = await response.json();
-      console.log(`[FIRECRAWL] Success response:`, JSON.stringify(data, null, 2));
-      
-      const extractedData = data.data?.llm_extraction || [];
-      console.log(`[FIRECRAWL] Extracted ${extractedData.length} recall items from ${url}`);
-      
-      return extractedData;
-      
-    } catch (error) {
-      console.error(`[FIRECRAWL] Attempt ${attempt} failed:`, error);
-      
-      if (attempt === retries) {
-        console.error(`[FIRECRAWL] All ${retries} attempts failed for ${url}`);
-        throw error;
-      }
-      
-      // Wait before retry
-      const waitTime = Math.pow(2, attempt) * 1000;
-      console.log(`[FIRECRAWL] Waiting ${waitTime}ms before retry...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+// Fetch FDA recalls from official API
+const fetchFDARecalls = async () => {
+  console.log('[FDA] Fetching recalls from FDA API...');
+  try {
+    const today = new Date();
+    const oneMonthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+    const dateQuery = `[${oneMonthAgo.toISOString().split('T')[0].replace(/-/g, '')}+TO+${today.toISOString().split('T')[0].replace(/-/g, '')}]`;
+    
+    const response = await fetch(`https://api.fda.gov/food/enforcement.json?search=recall_initiation_date:${dateQuery}&limit=20`);
+    
+    if (!response.ok) {
+      throw new Error(`FDA API error: ${response.status}`);
     }
+    
+    const data = await response.json();
+    console.log(`[FDA] Retrieved ${data.results?.length || 0} recalls`);
+    
+    return (data.results || []).map((recall: any) => ({
+      title: recall.product_description || 'FDA Food Recall',
+      description: recall.reason_for_recall || '',
+      product_name: recall.product_description || 'Unknown Product',
+      brand: recall.recalling_firm || null,
+      category: 'Food & Beverages',
+      recall_number: recall.recall_number || null,
+      recall_date: recall.recall_initiation_date || new Date().toISOString().split('T')[0],
+      risk_level: recall.classification === 'Class I' ? 'HIGH' : recall.classification === 'Class II' ? 'MEDIUM' : 'LOW',
+      source: 'FDA' as const,
+      remedy_instructions: 'Do not consume. Return to place of purchase.',
+      source_url: 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts'
+    }));
+  } catch (error) {
+    console.error('[FDA] Error fetching recalls:', error);
+    return [];
   }
-  
-  return [];
+};
+
+// Fetch CPSC recalls from RSS feed
+const fetchCPSCRecalls = async () => {
+  console.log('[CPSC] Fetching recalls from RSS feed...');
+  try {
+    const response = await fetch('https://www.cpsc.gov/Newsroom/rss');
+    
+    if (!response.ok) {
+      throw new Error(`CPSC RSS error: ${response.status}`);
+    }
+    
+    const rssText = await response.text();
+    console.log('[CPSC] RSS feed retrieved, parsing...');
+    
+    // Simple RSS parsing
+    const items = rssText.match(/<item>[\s\S]*?<\/item>/g) || [];
+    console.log(`[CPSC] Found ${items.length} RSS items`);
+    
+    return items.slice(0, 10).map((item, index) => {
+      const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || `CPSC Recall ${index + 1}`;
+      const description = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] || '';
+      const link = item.match(/<link>(.*?)<\/link>/)?.[1] || '';
+      const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
+      
+      // Parse date
+      let recallDate = new Date().toISOString().split('T')[0];
+      if (pubDate) {
+        const parsedDate = new Date(pubDate);
+        if (!isNaN(parsedDate.getTime())) {
+          recallDate = parsedDate.toISOString().split('T')[0];
+        }
+      }
+      
+      return {
+        title: title.replace('CPSC Announces ', '').replace(' Recall', ''),
+        description: description.replace(/<[^>]*>/g, '').substring(0, 500),
+        product_name: title.replace('CPSC Announces ', '').replace(' Recall', ''),
+        brand: null,
+        category: categorizeProduct(title, description),
+        recall_number: null,
+        recall_date: recallDate,
+        risk_level: 'MEDIUM' as const,
+        source: 'CPSC' as const,
+        remedy_instructions: 'Stop using immediately. Contact manufacturer.',
+        source_url: link || 'https://www.cpsc.gov/Recalls'
+      };
+    });
+  } catch (error) {
+    console.error('[CPSC] Error fetching recalls:', error);
+    return [];
+  }
+};
+
+// Fetch NHTSA recalls from API
+const fetchNHTSARecalls = async () => {
+  console.log('[NHTSA] Fetching recalls from NHTSA API...');
+  try {
+    // Get recent recalls
+    const response = await fetch('https://api.nhtsa.gov/recalls/recallsByVehicle?make=&model=&year=2024&to=2025');
+    
+    if (!response.ok) {
+      // Fallback to a different endpoint
+      console.log('[NHTSA] Primary API failed, trying alternative...');
+      const altResponse = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/getrecallsbymanufacturer/Honda?format=json');
+      
+      if (!altResponse.ok) {
+        throw new Error(`NHTSA API error: ${altResponse.status}`);
+      }
+      
+      const altData = await altResponse.json();
+      console.log(`[NHTSA] Retrieved ${altData.Results?.length || 0} recalls from alternative endpoint`);
+      
+      return (altData.Results || []).slice(0, 5).map((recall: any) => ({
+        title: recall.Component || 'Vehicle Recall',
+        description: recall.Summary || '',
+        product_name: `${recall.Make || ''} ${recall.Model || ''}`.trim() || 'Vehicle',
+        brand: recall.Make || null,
+        category: 'Vehicles',
+        recall_number: recall.NHTSACampaignNumber || null,
+        recall_date: recall.ReportReceivedDate || new Date().toISOString().split('T')[0],
+        risk_level: 'HIGH' as const,
+        source: 'NHTSA' as const,
+        remedy_instructions: 'Contact authorized dealer for inspection and repair.',
+        source_url: 'https://www.nhtsa.gov/recalls'
+      }));
+    }
+    
+    const data = await response.json();
+    console.log(`[NHTSA] Retrieved ${data.results?.length || 0} recalls`);
+    
+    return (data.results || []).slice(0, 5).map((recall: any) => ({
+      title: recall.Subject || 'Vehicle Recall',
+      description: recall.Summary || '',
+      product_name: `${recall.Make || ''} ${recall.Model || ''}`.trim() || 'Vehicle',
+      brand: recall.Make || null,
+      category: 'Vehicles',
+      recall_number: recall.NHTSACampaignNumber || null,
+      recall_date: recall.ReportReceivedDate || new Date().toISOString().split('T')[0],
+      risk_level: 'HIGH' as const,
+      source: 'NHTSA' as const,
+      remedy_instructions: 'Contact authorized dealer for inspection and repair.',
+      source_url: 'https://www.nhtsa.gov/recalls'
+    }));
+  } catch (error) {
+    console.error('[NHTSA] Error fetching recalls:', error);
+    return [];
+  }
 };
 
 const categorizeProduct = (productName: string, description: string): string => {
@@ -137,73 +194,42 @@ const categorizeProduct = (productName: string, description: string): string => 
 };
 
 const scrapeRecallSources = async () => {
-  console.log(`[SCRAPER] Starting recall scraping from multiple sources...`);
-  console.log(`[SCRAPER] Firecrawl API Key present: ${firecrawlApiKey ? 'YES' : 'NO'}`);
+  console.log(`[SCRAPER] Starting recall scraping from multiple sources using proper APIs...`);
   
-  const sources = [
-    {
-      url: 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts',
-      source: 'FDA' as const
-    },
-    {
-      url: 'https://www.cpsc.gov/Recalls',
-      source: 'CPSC' as const
-    },
-    {
-      url: 'https://www.nhtsa.gov/recalls',
-      source: 'NHTSA' as const
-    }
-  ];
-
   const allRecalls: RecallData[] = [];
   const sourceResults: Record<string, { success: boolean; count: number; error?: string }> = {};
 
-  for (const sourceInfo of sources) {
-    try {
-      console.log(`[SCRAPER] Processing ${sourceInfo.source} - URL: ${sourceInfo.url}`);
-      const extractedData = await scrapeWithFirecrawl(sourceInfo.url);
-      
-      if (Array.isArray(extractedData)) {
-        console.log(`[SCRAPER] Raw extracted data for ${sourceInfo.source}:`, extractedData.slice(0, 2));
-        
-        const processedRecalls = extractedData.map((recall: any) => {
-          const processed = {
-            title: recall.title || 'Untitled Recall',
-            description: recall.description || '',
-            product_name: recall.product_name || recall.title || 'Unknown Product',
-            brand: recall.brand || null,
-            category: recall.category || categorizeProduct(recall.product_name || '', recall.description || ''),
-            recall_number: recall.recall_number || null,
-            recall_date: recall.recall_date || new Date().toISOString().split('T')[0],
-            risk_level: recall.risk_level || 'MEDIUM',
-            source: sourceInfo.source,
-            remedy_instructions: recall.remedy_instructions || 'Contact manufacturer for details',
-            source_url: recall.source_url || sourceInfo.url
-          };
-          
-          console.log(`[SCRAPER] Processed recall from ${sourceInfo.source}:`, processed.title);
-          return processed;
-        });
-        
-        allRecalls.push(...processedRecalls);
-        sourceResults[sourceInfo.source] = { success: true, count: processedRecalls.length };
-        console.log(`[SCRAPER] Successfully processed ${processedRecalls.length} recalls from ${sourceInfo.source}`);
-      } else {
-        console.warn(`[SCRAPER] No array data returned from ${sourceInfo.source}:`, extractedData);
-        sourceResults[sourceInfo.source] = { success: false, count: 0, error: 'No array data returned' };
-      }
-    } catch (error) {
-      console.error(`[SCRAPER] Error scraping ${sourceInfo.source}:`, error);
-      sourceResults[sourceInfo.source] = { 
-        success: false, 
-        count: 0, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      };
-    }
-    
-    // Rate limiting between sources
-    console.log(`[SCRAPER] Waiting 2 seconds before next source...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+  // Fetch from FDA API
+  try {
+    const fdaRecalls = await fetchFDARecalls();
+    allRecalls.push(...fdaRecalls);
+    sourceResults['FDA'] = { success: true, count: fdaRecalls.length };
+    console.log(`[SCRAPER] Successfully fetched ${fdaRecalls.length} recalls from FDA API`);
+  } catch (error) {
+    console.error('[SCRAPER] FDA fetch failed:', error);
+    sourceResults['FDA'] = { success: false, count: 0, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+
+  // Fetch from CPSC RSS
+  try {
+    const cpscRecalls = await fetchCPSCRecalls();
+    allRecalls.push(...cpscRecalls);
+    sourceResults['CPSC'] = { success: true, count: cpscRecalls.length };
+    console.log(`[SCRAPER] Successfully fetched ${cpscRecalls.length} recalls from CPSC RSS`);
+  } catch (error) {
+    console.error('[SCRAPER] CPSC fetch failed:', error);
+    sourceResults['CPSC'] = { success: false, count: 0, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+
+  // Fetch from NHTSA API
+  try {
+    const nhtsaRecalls = await fetchNHTSARecalls();
+    allRecalls.push(...nhtsaRecalls);
+    sourceResults['NHTSA'] = { success: true, count: nhtsaRecalls.length };
+    console.log(`[SCRAPER] Successfully fetched ${nhtsaRecalls.length} recalls from NHTSA API`);
+  } catch (error) {
+    console.error('[SCRAPER] NHTSA fetch failed:', error);
+    sourceResults['NHTSA'] = { success: false, count: 0, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 
   console.log(`[SCRAPER] Final results by source:`, sourceResults);

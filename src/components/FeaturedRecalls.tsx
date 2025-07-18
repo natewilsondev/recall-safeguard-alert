@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRecalls } from "@/hooks/useRecalls";
+import { useNavigate } from "react-router-dom";
 
 export const FeaturedRecalls = () => {
+  const navigate = useNavigate();
   const { data: recalls, isLoading, error } = useRecalls({ limit: 6 });
 
   const getRiskColor = (risk: string) => {
@@ -134,7 +136,11 @@ export const FeaturedRecalls = () => {
                   </div>
                 </div>
                 
-                <Button variant="outline" className="w-full group">
+                <Button 
+                  variant="outline" 
+                  className="w-full group"
+                  onClick={() => navigate(`/recall/${recall.id}`)}
+                >
                   View Details
                   <ExternalLink className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>

@@ -9,10 +9,12 @@ import { supabase } from "@/integrations/supabase/client";
 export const RecallScraper = () => {
   const [isScrapingLoading, setIsScrapingLoading] = useState(false);
   const [lastScrapeResult, setLastScrapeResult] = useState<any>(null);
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleScrapeRecalls = async () => {
     setIsScrapingLoading(true);
+    setScrapeError(null);
     
     try {
       console.log('Starting recall scraping...');
@@ -22,21 +24,35 @@ export const RecallScraper = () => {
       });
 
       if (error) {
+        console.error('Supabase function error:', error);
+        setScrapeError(`Function error: ${error.message}`);
         throw error;
       }
 
+      console.log('Scraping result:', data);
       setLastScrapeResult(data);
       
-      toast({
-        title: "Scraping Complete",
-        description: `${data.inserted} new recalls added from ${data.total_found} found`,
-      });
+      if (data.success) {
+        toast({
+          title: "Scraping Complete",
+          description: `${data.inserted} new recalls added from ${data.total_found} found`,
+        });
+      } else {
+        toast({
+          title: "Scraping Issues",
+          description: "Some sources may have failed. Check results below.",
+          variant: "destructive",
+        });
+      }
       
     } catch (error) {
       console.error('Error scraping recalls:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setScrapeError(errorMessage);
+      
       toast({
-        title: "Error",
-        description: "Failed to scrape recalls. Please try again.",
+        title: "Scraping Failed",
+        description: `Error: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -75,14 +91,37 @@ export const RecallScraper = () => {
           )}
         </Button>
 
+        {scrapeError && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
+            <h4 className="font-semibold text-red-800 mb-2">Error Details:</h4>
+            <p className="text-red-700">{scrapeError}</p>
+          </div>
+        )}
+
         {lastScrapeResult && (
           <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
             <h4 className="font-semibold mb-2">Last Scrape Results:</h4>
             <ul className="space-y-1">
               <li>• Found: {lastScrapeResult.total_found} recalls</li>
               <li>• Added: {lastScrapeResult.inserted} new recalls</li>
+              <li>• Duplicates: {lastScrapeResult.duplicates || 0}</li>
+              <li>• Errors: {lastScrapeResult.errors || 0}</li>
               <li>• Status: {lastScrapeResult.success ? 'Success' : 'Failed'}</li>
             </ul>
+            
+            {lastScrapeResult.source_results && (
+              <div className="mt-3">
+                <h5 className="font-medium mb-1">Source Results:</h5>
+                {Object.entries(lastScrapeResult.source_results).map(([source, result]: [string, any]) => (
+                  <div key={source} className="flex justify-between text-xs">
+                    <span>{source}:</span>
+                    <span className={result.success ? 'text-green-600' : 'text-red-600'}>
+                      {result.success ? `${result.count} found` : result.error}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
